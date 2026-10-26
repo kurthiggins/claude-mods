@@ -162,20 +162,23 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         <Text dimColor>1–9 or ↑/↓ + Enter jump · Esc back to prompt · 1 = latest</Text>
-        {prompts.map(({ id, text }, i) => (
+        {prompts.map(({ id, text }, i) => {
+          // A plain Button draws its hotkey as `1: `; rows past the hotkeys
+          // write their number the same way.
+          const line = i < HOTKEYS ? oneLine(text, width) : `${i + 1}: ${oneLine(text, width - 1)}`
+          return (
           <Button
             key={`p:${id}`}
-            label={`${String(i + 1).padStart(2)} ${oneLine(text, width)}`}
+            label={line}
             plain
             hotkey={i < HOTKEYS ? String(i + 1) : undefined}
             autoFocus={i === 0 ? true : undefined}
             onPress={() => void jump(id)}
           >
-            <Text color={colors[i] ?? 'claude'}>
-              {`${String(i + 1).padStart(2)} ${oneLine(text, width)}`}
-            </Text>
+            <Text color={colors[i] ?? 'claude'}>{line}</Text>
           </Button>
-        ))}
+          )
+        })}
       </Box>
     )
   })
