@@ -150,6 +150,9 @@ export const register: Register = on => {
 
     // The pane stays open after a jump, so another number or arrow follows on.
     const jump = async (id: string) => {
+      // A number key presses its row without moving the ring; put the ring on
+      // the row the transcript now shows, so ↑/↓ carry on from there.
+      await $.ui.focus({ requestId: PANE, key: `p:${id}` })
       const moved = await $.ui.scroll({ to: { requestId: id }, block: 'start' })
       if ('deny' in moved && moved.deny) $.ui.toast(`Couldn't scroll there: ${moved.deny}`)
     }
