@@ -9,6 +9,67 @@ type Prompt = { id: string; text: string }
 // Filled from the transcript file each time the list opens. A prompt's `uuid`
 // there is its transcript row's requestId, which $.ui.scroll targets.
 let prompts: Prompt[] = []
+// One color per prompt row, oldest first; set with the list.
+let colors: string[] = []
+
+// ── Row colors ──────────────────────────────────────────────────────────────
+// A mod can name a theme color but not read its value, so the accent ("claude",
+// the theme's highlight) and the background are looked up from the theme's name.
+// The newest prompt gets the accent; older ones step lighter, never past the
+// point where the text drops below WCAG AA contrast (4.5:1) on the background.
+type RGB = [number, number, number]
+
+const ACCENT: Record<string, RGB> = {
+  dark: [215, 119, 87],
+  light: [215, 119, 87],
+  'dark-daltonized': [255, 153, 51],
+  'light-daltonized': [255, 153, 51],
+}
+const BACKGROUND = { dark: [30, 30, 30] as RGB, light: [255, 255, 255] as RGB }
+const MIN_CONTRAST = 4.5
+const START_CONTRAST = 7 // a light background darkens the accent to this first
+const MAX_LIGHTEN = 0.6 // past this the rows read as gray, not as the accent
+
+const mix = (from: RGB, to: RGB, t: number): RGB =>
+  [0, 1, 2].map(k => Math.round(from[k]! + (to[k]! - from[k]!) * t)) as RGB
+
+const luminance = (c: RGB) => {
+  const [r, g, b] = c.map(v => {
+    const s = v / 255
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+  }) as RGB
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+const contrast = (a: RGB, b: RGB) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number]
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+const hex = (c: RGB) => `#${c.map(v => v.toString(16).padStart(2, '0')).join('')}`
+
+const rowColors = (theme: string, count: number): string[] => {
+  const accent = ACCENT[theme] ?? ACCENT[theme.startsWith('light') ? 'light' : 'dark']!
+  // ANSI themes have 16 colors and can't blend: every row takes the theme key.
+  if (theme.endsWith('-ansi') || count === 0) return Array(count).fill('claude')
+  // "auto" follows the terminal, which a mod can't read; most are dark.
+  const isLight = theme.startsWith('light')
+  const bg = isLight ? BACKGROUND.light : BACKGROUND.dark
+
+  // On a light background lightening lowers contrast, so start from a darker accent.
+  let start = accent
+  for (let t = 0.05; isLight && contrast(start, bg) < START_CONTRAST && t <= 1; t += 0.05) {
+    start = mix(accent, [0, 0, 0], t)
+  }
+  let maxT = 0
+  for (let t = 0.02; t <= MAX_LIGHTEN && contrast(mix(start, [255, 255, 255], t), bg) >= MIN_CONTRAST; t += 0.02) {
+    maxT = t
+  }
+  return Array.from({ length: count }, (_, i) => {
+    const age = count === 1 ? 0 : (count - 1 - i) / (count - 1) // 0 newest … 1 oldest
+    return hex(mix(start, [255, 255, 255], maxT * age))
+  })
+}
 
 const oneLine = (text: string, width: number) => {
   const line = text.replace(/\s+/g, ' ').trim()
@@ -56,6 +117,8 @@ export const register: Register = on => {
     const { stdout } = await $.process.run(['sh', '-c', GREP_TYPED, 'sh', await $.session.id()])
     prompts = parsePrompts(stdout)
     if (prompts.length === 0) return { text: 'No prompts in this session yet.' }
+    const theme = (await $.config.list()).find(row => row.key === 'theme')?.value
+    colors = rowColors(typeof theme === 'string' ? theme : 'dark', prompts.length)
     await $.ui.open({
       id: PANE,
       title: 'Recent prompts',
@@ -87,7 +150,11 @@ export const register: Register = on => {
             plain
             autoFocus={i === prompts.length - 1 ? true : undefined}
             onPress={() => void jump(id)}
-          />
+          >
+            <Text color={colors[i] ?? 'claude'}>
+              {`${String(i + 1).padStart(2)} ${oneLine(text, width)}`}
+            </Text>
+          </Button>
         ))}
       </Box>
     )
