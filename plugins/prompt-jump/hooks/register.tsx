@@ -144,6 +144,17 @@ export const register: Register = on => {
     return done
   })
 
+  // /clear starts a new session id (and transcript), so the old prompts no
+  // longer belong to it: empty an open list rather than leave stale rows.
+  on('session.end', async ($, e, next) => {
+    if (e.reason === 'clear') {
+      prompts = []
+      colors = []
+      $.ui.invalidate('ui.render')
+    }
+    return next(e)
+  })
+
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const width = Math.max(10, e.props.bodyColumns - 6)
@@ -162,6 +173,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         <Text dimColor>1–9 or ↑/↓ + Enter jump · Esc back to prompt · 1 = latest</Text>
+        {prompts.length === 0 && <Text dimColor>No prompts in this session yet.</Text>}
         {prompts.map(({ id, text }, i) => {
           // A plain Button draws its hotkey as `1: `; rows past the hotkeys
           // write their number the same way.
