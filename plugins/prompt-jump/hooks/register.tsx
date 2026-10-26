@@ -1,4 +1,4 @@
-import type { Register } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
 const PANE = 'prompt-jump'
 const MAX_ROWS = 20
@@ -9,8 +9,9 @@ type Prompt = { id: string; text: string }
 // Filled from the transcript file each time the list opens. A prompt's `uuid`
 // there is its transcript row's requestId, which $.ui.scroll targets.
 let prompts: Prompt[] = []
-// One color per prompt row, oldest first; set with the list.
+// One color per prompt row, newest first; set with the list.
 let colors: string[] = []
+const HOTKEYS = 9 // prompts 1–9 take a number key; 10 and up are arrows only
 
 // ── Row colors ──────────────────────────────────────────────────────────────
 // A mod can name a theme color but not read its value, so the accent ("claude",
@@ -66,7 +67,7 @@ const rowColors = (theme: string, count: number): string[] => {
     maxT = t
   }
   return Array.from({ length: count }, (_, i) => {
-    const age = count === 1 ? 0 : (count - 1 - i) / (count - 1) // 0 newest … 1 oldest
+    const age = count === 1 ? 0 : i / (count - 1) // 0 newest … 1 oldest
     return hex(mix(start, [255, 255, 255], maxT * age))
   })
 }
@@ -101,7 +102,16 @@ const parsePrompts = (stdout: string): Prompt[] => {
       // a partial line mid-write; skip it
     }
   }
-  return found.slice(-MAX_ENTRIES)
+  return found.slice(-MAX_ENTRIES).reverse() // newest first: the last prompt is 1
+}
+
+// Re-read the prompts and the theme, then redraw the pane.
+const refresh = async ($: EngineInterface) => {
+  const { stdout } = await $.process.run(['sh', '-c', GREP_TYPED, 'sh', await $.session.id()])
+  prompts = parsePrompts(stdout)
+  const theme = (await $.config.list()).find(row => row.key === 'theme')?.value
+  colors = rowColors(typeof theme === 'string' ? theme : 'dark', prompts.length)
+  $.ui.invalidate('ui.render')
 }
 
 export const register: Register = on => {
@@ -114,41 +124,46 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'prompts' }, async $ => {
-    const { stdout } = await $.process.run(['sh', '-c', GREP_TYPED, 'sh', await $.session.id()])
-    prompts = parsePrompts(stdout)
+    await refresh($)
     if (prompts.length === 0) return { text: 'No prompts in this session yet.' }
-    const theme = (await $.config.list()).find(row => row.key === 'theme')?.value
-    colors = rowColors(typeof theme === 'string' ? theme : 'dark', prompts.length)
+    // No closeOnEscape: Esc hands the keys back and the pane stays, as a tab
+    // beside other plugins' panes; its close mark (or ctrl+x x) closes it.
     await $.ui.open({
       id: PANE,
-      title: 'Recent prompts',
+      title: 'Prompts',
       focus: true,
-      closeOnEscape: true,
       rows: Math.min(prompts.length, MAX_ROWS) + 1,
     })
-    $.ui.invalidate('ui.render')
     return { text: '' }
+  })
+
+  // Keep an open list current: the prompt just answered becomes 1.
+  on('turn.complete', async ($, e, next) => {
+    const done = await next(e)
+    if (e.agentId === undefined && (await $.ui.panes()).some(pane => pane.id === PANE)) await refresh($)
+    return done
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const width = Math.max(10, e.props.bodyColumns - 6)
 
+    // The pane stays open after a jump, so another number or arrow follows on.
     const jump = async (id: string) => {
       const moved = await $.ui.scroll({ to: { requestId: id }, block: 'start' })
-      await $.ui.close({ id: PANE })
       if ('deny' in moved && moved.deny) $.ui.toast(`Couldn't scroll there: ${moved.deny}`)
     }
 
     return (
       <Box flexDirection="column">
-        <Text dimColor>↑/↓ choose · Enter jump · Esc close</Text>
+        <Text dimColor>1–9 or ↑/↓ + Enter jump · Esc back to prompt · 1 = latest</Text>
         {prompts.map(({ id, text }, i) => (
           <Button
             key={`p:${id}`}
             label={`${String(i + 1).padStart(2)} ${oneLine(text, width)}`}
             plain
-            autoFocus={i === prompts.length - 1 ? true : undefined}
+            hotkey={i < HOTKEYS ? String(i + 1) : undefined}
+            autoFocus={i === 0 ? true : undefined}
             onPress={() => void jump(id)}
           >
             <Text color={colors[i] ?? 'claude'}>
