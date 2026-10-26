@@ -1,0 +1,11 @@
+{
+  "name": "kurt-mods",
+  "owner": { "name": "Kurt Higgins" },
+  "plugins": [
+    {
+      "name": "prompt-jump",
+      "source": "./plugins/prompt-jump",
+      "description": "Pick one of your recent prompts and scroll the transcript back to it"
+    }
+  ]
+}
