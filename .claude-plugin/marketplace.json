@@ -1,6 +1,7 @@
 {
   "name": "kurt-mods",
   "owner": { "name": "Kurt Higgins" },
+  "description": "Small mods (plugins) for Claude Code",
   "plugins": [
     {
       "name": "prompt-jump",

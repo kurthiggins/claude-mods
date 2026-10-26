@@ -15,3 +15,9 @@ ones lighter but never below 4.5:1 contrast.
   (the file outgrows a mod's 4 MiB read cap). Only your own prompts are listed — typed or an
   accepted suggestion; slash commands and system notices are left out.
 - Mods can't register a key of their own, so there is no keyboard shortcut; `/pro` + Tab is close.
+
+## Install
+
+```
+/plugin install prompt-jump --marketplace kurthiggins/claude-mods
+```
