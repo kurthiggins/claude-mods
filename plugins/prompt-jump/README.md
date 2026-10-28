@@ -2,7 +2,7 @@
 
 A Claude Code mod for jumping back to one of your earlier prompts in a long session.
 
-![The /prompts pane listing earlier prompts, newest first](screenshot.png)
+<img src="screenshot.png" alt="The /prompts pane listing earlier prompts, newest first" width="360" align="right">
 
 Type `/prompts` to open a list of the prompts you've sent in this session, newest first: your
 last prompt is 1, the one before it 2, and so on. Press 1–9 to jump straight to that prompt, or
